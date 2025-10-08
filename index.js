@@ -7,6 +7,10 @@ const storeRoutes = require('./routes/catalog_service/storeRoutes');
 const productRoutes = require('./routes/catalog_service/productRoutes')
 const { setupDatabase, resetDatabase } = require('./db/setup'); 
 const addressRoutes=require('./routes/user_service/addressRoutes')
+const reviewRoutes=require('./routes/review_service/reviewRoutes')
+const financeRoutes=require('./routes/finance_service/financeRoutes')
+const debugRoutes = require('./routes/debugRoutes'); // <-- BARU: Import Debug Routes
+
 // --- DEBUG CHECKPOINT 1 ---
 console.log('CHECKPOINT 1: Dependensi dan Modul berhasil dimuat.'); 
 // --------------------------
@@ -30,6 +34,15 @@ app.use('/auth', addressRoutes(dbPool));
 app.use('/catalog', categoryRoutes(dbPool)); 
 app.use('/catalog', storeRoutes(dbPool));    
 app.use('/catalog',productRoutes(dbPool))
+
+app.use('/reviews',reviewRoutes(dbPool))
+
+app.use('/finance',financeRoutes(dbPool))
+
+app.use('/debug', debugRoutes(dbPool)); 
+
+
+
 
 app.post('/setup-database', (req, res) => setupDatabase(req, res, dbPool));
 

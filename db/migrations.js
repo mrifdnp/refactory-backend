@@ -93,7 +93,13 @@ CREATE TABLE IF NOT EXISTS order_items (
     quantity INT NOT NULL,
     price_per_item DECIMAL(10, 2) NOT NULL
 );
-
+CREATE TABLE IF NOT EXISTS buyer_wallets (
+    id SERIAL PRIMARY KEY,
+    user_id INT UNIQUE NOT NULL REFERENCES users(id),
+    balance DECIMAL(12, 2) NOT NULL DEFAULT 0,
+    last_updated TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+Aksi: Tambahkan kode di atas 
 -- Tabel untuk ulasan produk
 CREATE TABLE IF NOT EXISTS reviews (
     id SERIAL PRIMARY KEY,

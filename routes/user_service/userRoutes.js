@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken'); // Untuk membuat token
 const saltRounds = 10; 
+const { authenticateToken, authorizeRole } = require('../../middleware/authMiddleware'); 
 
 // Fungsi ini menerima dbPool dari index.js (Dependency Injection)
 module.exports = (dbPool) => {
@@ -99,9 +100,7 @@ module.exports = (dbPool) => {
         }
     });
 
-    // ----------------------------------------------------
-    // GET /users (Ambil semua)
-    // ----------------------------------------------------
+
     router.get('/users', async (req, res) => {
         try {
             const queryText = `SELECT id, "full_name", email, phone_number, role, created_at, updated_at FROM users ORDER BY created_at DESC;`;
@@ -137,6 +136,77 @@ module.exports = (dbPool) => {
         } catch (err) {
             console.error('Error saat mengambil pengguna berdasarkan ID:', err.message);
             res.status(500).json({ status: "Gagal", error: "Gagal mengambil data pengguna.", details: err.message });
+        }
+    });
+ // GET /wallet: Melihat Saldo Pembeli
+    router.get('/wallet', authenticateToken, async (req, res) => {
+        const user_id = req.user.id;
+        
+        try {
+            const result = await dbPool.query('SELECT balance, last_updated FROM buyer_wallets WHERE user_id = $1', [user_id]);
+            
+            if (result.rowCount === 0) {
+                 // Jika record belum ada, inisialisasi saldo 0 dan buat record baru (UPSERT pattern)
+                 await dbPool.query('INSERT INTO buyer_wallets (user_id, balance) VALUES ($1, 0) ON CONFLICT (user_id) DO NOTHING', [user_id]);
+
+                 return res.status(200).json({ 
+                    status: "Sukses", 
+                    message: "Saldo ditemukan.",
+                    wallet: { balance: 0, last_updated: new Date() }
+                 });
+            }
+
+            res.status(200).json({ 
+                status: "Sukses", 
+                wallet: result.rows[0] 
+            });
+
+        } catch (err) {
+            console.error('Error saat mengambil saldo pembeli:', err.message);
+            res.status(500).json({ status: "Gagal", error: "Gagal mengambil saldo.", details: err.message });
+        }
+    });
+
+    // POST /wallet/deposit: Melakukan Top-Up/Deposit ke Saldo Pembeli
+    router.post('/wallet/deposit', authenticateToken, async (req, res) => {
+        const { amount } = req.body;
+        const user_id = req.user.id;
+
+        if (!amount || amount <= 0) {
+            return res.status(400).json({ status: "Gagal", error: "Jumlah deposit harus lebih dari nol." });
+        }
+
+        const client = await dbPool.connect();
+        try {
+            await client.query('BEGIN'); // Transaksi wajib untuk operasi keuangan
+
+            // Update saldo pembeli, jika record belum ada, buat (UPSERT)
+            const queryText = `
+                INSERT INTO buyer_wallets (user_id, balance, last_updated) 
+                VALUES ($1, $2, NOW())
+                ON CONFLICT (user_id) DO UPDATE 
+                SET balance = buyer_wallets.balance + $2, last_updated = NOW()
+                RETURNING balance, last_updated;
+            `;
+            
+            const result = await client.query(queryText, [user_id, amount]);
+            
+            // Logika lanjutan: Catat transaksi deposit di tabel 'transactions' jika diperlukan.
+
+            await client.query('COMMIT');
+
+            res.status(200).json({ 
+                status: "Sukses", 
+                message: `Deposit sebesar ${amount} berhasil.`,
+                new_balance: result.rows[0].balance
+            });
+
+        } catch (err) {
+            await client.query('ROLLBACK');
+            console.error('Error saat deposit:', err.message);
+            res.status(500).json({ status: "Gagal", error: "Kesalahan server saat deposit.", details: err.message });
+        } finally {
+            client.release();
         }
     });
 

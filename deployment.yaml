@@ -29,3 +29,6 @@ spec:
               value: "9Vzo71%vmvNLkWsS:MCBLJWTn32423??"
             - name: DB_NAME
               value: "cipta_works"
+            - name: JWT_SECRET
+              value: IkedaTeresaCantikSekali
+
