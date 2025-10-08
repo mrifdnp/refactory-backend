@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cipta-works-backend
+  namespace: cipta-works
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cipta-works-backend
+  template:
+    metadata:
+      labels:
+        app: cipta-works-backend
+    spec:
+      containers:
+        - name: cipta-works-backend
+          image: mrifqdnp/cipta1:latest
+          ports:
+            - containerPort: 3000
+          env:
+            - name: DB_HOST
+              value: "103.185.52.65"
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_USER
+              value: "cipta_works"
+            - name: DB_PASS
+              value: "9Vzo71%vmvNLkWsS:MCBLJWTn32423??"
+            - name: DB_NAME
+              value: "cipta_works"

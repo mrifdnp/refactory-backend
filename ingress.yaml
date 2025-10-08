@@ -1,0 +1,17 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: cipta-works-ingress
+  namespace: cipta-works
+spec:
+  rules:
+    - host: cipta-works.hackathon.sev-2.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: cipta-works-service
+                port:
+                  number: 80
