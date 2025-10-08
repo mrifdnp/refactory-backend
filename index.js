@@ -1,10 +1,20 @@
 require('dotenv').config();
 const express = require('express');
 const { Pool } = require('pg');
+const userRoutes = require('./routes/user_service/userRoutes'); 
+const categoryRoutes = require('./routes/catalog_service/categoryRoutes'); 
+const storeRoutes = require('./routes/catalog_service/storeRoutes'); 
+const productRoutes = require('./routes/catalog_service/productRoutes')
+const { setupDatabase, resetDatabase } = require('./db/setup'); 
+const addressRoutes=require('./routes/user_service/addressRoutes')
+// --- DEBUG CHECKPOINT 1 ---
+console.log('CHECKPOINT 1: Dependensi dan Modul berhasil dimuat.'); 
+// --------------------------
 
 const app = express();
 app.use(express.json());
 
+// Inisialisasi Koneksi Database PostgreSQL
 const dbPool = new Pool({
   host: process.env.DB_HOST,
   port: process.env.DB_PORT,
@@ -13,27 +23,26 @@ const dbPool = new Pool({
   database: process.env.DB_NAME,
 });
 
+app.use('/auth', userRoutes(dbPool)); 
+app.use('/auth', addressRoutes(dbPool));
+
+
+app.use('/catalog', categoryRoutes(dbPool)); 
+app.use('/catalog', storeRoutes(dbPool));    
+app.use('/catalog',productRoutes(dbPool))
+
+app.post('/setup-database', (req, res) => setupDatabase(req, res, dbPool));
+
+
+app.delete('/reset-database', (req, res) => resetDatabase(req, res, dbPool));
+
+
+
 app.get('/', (req, res) => {
-  res.send('Server Express berjalan!');
+  res.send('✅ Server berjalan. Siap memuat rute modular!');
 });
 
-app.get('/db-test', async (req, res) => {
-  try {
-    const result = await dbPool.query('SELECT NOW() AS current_time');
-    res.json({
-      status: "Koneksi DB Sukses",
-      server_time: result.rows[0].current_time,
-    });
-  } catch (err) {
-    console.error('Database Connection Error:', err.message);
-    res.status(500).json({
-      status: "Koneksi DB Gagal",
-      error: err.message,
-    });
-  }
-});
-
-// ← Tambahkan ini untuk daftar tabel
+// GET /db-tables (Untuk debugging)
 app.get('/db-tables', async (req, res) => {
   const queryText = `
     SELECT table_name
@@ -57,29 +66,18 @@ app.get('/db-tables', async (req, res) => {
   }
 });
 
-app.get('/db-count-tables', async (req, res) => {
-  const queryText = `
-    SELECT COUNT(*) AS total_tables
-    FROM information_schema.tables
-    WHERE table_schema = 'public';
-  `;
-  try {
-    const result = await dbPool.query(queryText);
-    res.json({
-      status: "Sukses",
-      total_tables: parseInt(result.rows[0].total_tables, 10)
-    });
-  } catch (err) {
-    console.error('Error saat menghitung tabel:', err.message);
-    res.status(500).json({
-      status: "Gagal",
-      error: err.message,
-    });
-  }
-});
 
+// =======================================================
+// 4. LISTENER SERVER
+// =======================================================
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`🚀 Server berjalan di http://localhost:${PORT}`);
-  console.log(`Akses http://localhost:${PORT}/db-test dan /db-tables untuk menguji DB.`);
+  console.log('CHECKPOINT 2: app.listen() berhasil dipanggil.');
+  console.log(`🚀 Server berjalan di http://localhost:${PORT}.`);
+  console.log(`Uji Auth: http://localhost:${PORT}/auth/login`);
+  console.log(`Uji Toko: http://localhost:${PORT}/catalog/stores`);
+  console.log(`SETUP MIGRATION: POST http://localhost:${PORT}/setup-database`);
+}).on('error', (err) => { 
+  console.error('SERVER CRASHED (PORT ISSUE):', err.message);
+  console.error(`Coba ganti PORT di file .env Anda. Port ${PORT} mungkin sudah digunakan.`);
 });
