@@ -31,4 +31,7 @@ spec:
               value: "cipta_works"
             - name: JWT_SECRET
               value: IkedaTeresaCantikSekali
+            - name: GEMINI_API_KEY
+              value : "AIzaSyD_Le_t0XHVqbswodRLeE98lUsJ1-m8jWU"
+
 

@@ -138,6 +138,88 @@ module.exports = (dbPool) => {
             res.status(500).json({ status: "Gagal", error: "Gagal mengambil data pengguna.", details: err.message });
         }
     });
+
+     router.put('/users/:id', authenticateToken, async (req, res) => {
+        const targetUserId = parseInt(req.params.id);
+        const { full_name, email, phone_number, role } = req.body;
+        const authUser = req.user; // Data user dari token: { id, role, ... }
+
+        // --- Otorisasi: Verifikasi Kepemilikan atau Admin ---
+        // 1. Pengguna hanya boleh mengedit datanya sendiri.
+        // 2. Jika bukan data sendiri, harus memiliki role 'admin' untuk bisa mengedit.
+        if (authUser.id !== targetUserId && authUser.role !== 'admin') {
+            return res.status(403).json({ status: "Gagal", error: "Tidak diizinkan mengubah data pengguna lain." });
+        }
+
+        // --- Kontrol Role Update ---
+        // Hanya admin yang diizinkan untuk mengubah role pengguna lain.
+        if (role && role !== authUser.role && authUser.role !== 'admin') {
+            return res.status(403).json({ status: "Gagal", error: "Tidak diizinkan mengubah role pengguna." });
+        }
+        
+        // --- Membangun Query Update Dinamis ---
+        const fields = [];
+        const values = [];
+        let paramIndex = 1;
+
+        if (full_name !== undefined) {
+            fields.push(`"full_name" = $${paramIndex++}`);
+            values.push(full_name);
+        }
+        if (email !== undefined) {
+            fields.push(`email = $${paramIndex++}`);
+            values.push(email);
+        }
+        if (phone_number !== undefined) {
+            fields.push(`phone_number = $${paramIndex++}`);
+            values.push(phone_number);
+        }
+        // Role: Hanya tambahkan jika di-set di body DAN diizinkan
+        if (role !== undefined && (role === authUser.role || authUser.role === 'admin')) {
+             fields.push(`role = $${paramIndex++}`);
+             values.push(role);
+        }
+
+
+        if (fields.length === 0) {
+            return res.status(400).json({ status: "Gagal", error: "Tidak ada data yang diberikan untuk diperbarui." });
+        }
+
+        fields.push(`updated_at = NOW()`); // Selalu update timestamp
+        
+        // Tambahkan ID pengguna yang ditargetkan sebagai parameter terakhir
+        values.push(targetUserId);
+
+        try {
+            const queryText = `
+                UPDATE "users"
+                SET ${fields.join(', ')}
+                WHERE id = $${paramIndex}
+                RETURNING id, "full_name", email, phone_number, role, created_at, updated_at;
+            `;
+            
+            const result = await dbPool.query(queryText, values);
+
+            if (result.rowCount === 0) {
+                return res.status(404).json({ status: "Gagal", error: "Pengguna tidak ditemukan." });
+            }
+
+            res.status(200).json({
+                status: "Sukses",
+                message: "Data pengguna berhasil diperbarui.",
+                user: result.rows[0]
+            });
+
+        } catch (err) {
+            if (err.code === '23505') { // Error UNIQUE constraint (misalnya email sudah dipakai)
+                return res.status(409).json({ status: "Gagal", error: "Email atau Nomor Telepon sudah digunakan oleh pengguna lain." });
+            }
+
+            console.error('Error saat memperbarui pengguna:', err.message);
+            res.status(500).json({ status: "Gagal", error: "Kesalahan server saat memperbarui data.", details: err.message });
+        }
+    });
+
  // GET /wallet: Melihat Saldo Pembeli
     router.get('/wallet', authenticateToken, async (req, res) => {
         const user_id = req.user.id;

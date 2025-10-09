@@ -1,0 +1,644 @@
+openapi: 3.0.0
+info:
+  title: API E-commerce Sederhana
+  description: API untuk mengelola pengguna, toko, produk, pesanan, dan transaksi.
+  version: 1.0.0
+servers:
+  - url: /api/v1
+    description: Server Lokal
+
+components:
+  schemas:
+    # --- ENUMS ---
+    UserRole:
+      type: string
+      enum: [buyer, seller, admin]
+      description: Peran pengguna.
+    OrderStatus:
+      type: string
+      enum: [pending, paid, shipped, delivered, cancelled, failed]
+      description: Status pesanan.
+    WithdrawalStatus:
+      type: string
+      enum: [pending, processed, failed]
+      description: Status penarikan dana.
+    TransactionType:
+      type: string
+      enum: [sale, commission, withdrawal, refund, adjustment]
+      description: Jenis transaksi.
+    
+    # --- Skema Entitas Utama ---
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int32
+          readOnly: true
+        full_name:
+          type: string
+        email:
+          type: string
+          format: email
+        password_hash:
+          type: string
+          description: Hash kata sandi (Hanya ada di database).
+          readOnly: true
+        role:
+          $ref: '#/components/schemas/UserRole'
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+    
+    NewUser:
+      type: object
+      required: [email, password, full_name]
+      properties:
+        full_name:
+          type: string
+          example: John Doe
+        email:
+          type: string
+          format: email
+          example: john.doe@example.com
+        password:
+          type: string
+          description: Kata sandi mentah.
+          example: S3cur3P@ssw0rd!
+        phone_number:
+          type: string
+          example: "081234567890"
+    
+    Product:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int32
+          readOnly: true
+        store_id:
+          type: integer
+        category_id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        price:
+          type: number
+          format: float
+        stock_quantity:
+          type: integer
+        is_active:
+          type: boolean
+    
+    NewProduct: 
+      type: object
+      required: [name, price]
+      properties:
+        store_id:
+          type: integer
+          description: ID Toko (Otomatis dari konteks penjual/token)
+          example: 1
+        category_id:
+          type: integer
+          example: 5
+        name:
+          type: string
+          example: Mouse Gaming X
+        description:
+          type: string
+          example: Mouse ergonomis dengan sensor presisi.
+        price:
+          type: number
+          format: float
+          example: 350000.00
+        stock_quantity:
+          type: integer
+          example: 50
+        is_active:
+          type: boolean
+          example: true
+    
+    Store:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int32
+          readOnly: true
+        user_id:
+          type: integer
+        name:
+          type: string
+        slug:
+          type: string
+        is_verified:
+          type: boolean
+    
+    NewOrder:
+      type: object
+      required: [items, shipping_address]
+      properties:
+        shipping_address:
+          type: string
+          example: Jl. Sudirman No. 12, Jakarta Selatan
+        items:
+          type: array
+          items:
+            type: object
+            required: [product_id, quantity]
+            properties:
+              product_id:
+                type: integer
+                example: 101
+              quantity:
+                type: integer
+                example: 2
+    
+    Order: 
+      type: object
+      properties:
+        id:
+          type: string
+          example: ORD-20251009-0001
+          readOnly: true
+        user_id:
+          type: integer
+          readOnly: true
+        total_amount:
+          type: number
+          format: float
+          readOnly: true
+        status:
+          $ref: '#/components/schemas/OrderStatus'
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+
+    Review:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        user_id:
+          type: integer
+          readOnly: true
+        product_id:
+          type: integer
+          readOnly: true
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        comment:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+    
+paths:
+  # -----------------------------------------------------
+  # --- ENDPOINT PENGGUNA (users) ---
+  # -----------------------------------------------------
+  /users/register:
+    post:
+      tags:
+        - Users
+      summary: Mendaftarkan Pengguna Baru
+      description: Membuat akun pengguna baru dengan peran default 'buyer'.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewUser'
+      responses:
+        '201':
+          description: Pengguna berhasil dibuat.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '409':
+          description: Email sudah terdaftar.
+  
+  /users/{userId}:
+    get: # ✅ GET DITAMBAHKAN
+      tags:
+        - Users
+      summary: Mendapatkan Detail Pengguna
+      description: Mengambil detail profil pengguna berdasarkan ID.
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID pengguna.
+      responses:
+        '200':
+          description: Detail pengguna.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '404':
+          description: Pengguna tidak ditemukan.
+    put:
+      tags:
+        - Users
+      summary: Memperbarui Profil Pengguna
+      description: Memperbarui detail profil pengguna yang ada.
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID pengguna yang akan diperbarui.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/User'
+              properties:
+                full_name:
+                  type: string
+                phone_number:
+                  type: string
+      responses:
+        '200':
+          description: Profil berhasil diperbarui.
+        '404':
+          description: Pengguna tidak ditemukan.
+    delete: # ✅ DELETE DITAMBAHKAN
+      tags:
+        - Users
+      summary: Menghapus Akun Pengguna
+      description: Menghapus akun pengguna. (Hanya oleh Admin atau pengguna itu sendiri)
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Akun berhasil dihapus (No Content).
+        '404':
+          description: Pengguna tidak ditemukan.
+
+  # -----------------------------------------------------
+  # --- ENDPOINT PRODUK (products) ---
+  # -----------------------------------------------------
+  /products:
+    get: # ✅ GET DAFTAR DITAMBAHKAN
+      tags:
+        - Products
+      summary: Daftar Produk
+      description: Mengambil daftar semua produk dengan opsi filter/paginasi.
+      parameters:
+        - name: storeId
+          in: query
+          schema:
+            type: integer
+            description: Filter berdasarkan ID toko.
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Daftar produk.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Product'
+    post:
+      tags:
+        - Products
+      summary: Membuat Produk Baru
+      description: Menambahkan produk baru ke toko penjual. (Memerlukan peran 'seller')
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewProduct'
+      responses:
+        '201':
+          description: Produk berhasil dibuat.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '403':
+          description: Akses ditolak.
+
+  /products/{productId}:
+    get: # ✅ GET DETAIL DITAMBAHKAN
+      tags:
+        - Products
+      summary: Mendapatkan Detail Produk
+      description: Mengambil detail satu produk berdasarkan ID.
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Detail produk.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '404':
+          description: Produk tidak ditemukan.
+    put:
+      tags:
+        - Products
+      summary: Memperbarui Produk
+      description: Memperbarui detail produk yang ada. (Hanya penjual pemilik toko yang bisa)
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewProduct'
+      responses:
+        '200':
+          description: Produk berhasil diperbarui.
+        '404':
+          description: Produk tidak ditemukan.
+        '403':
+          description: Tidak diizinkan.
+    delete: # ✅ DELETE DITAMBAHKAN
+      tags:
+        - Products
+      summary: Menghapus Produk
+      description: Menghapus produk dari toko. (Hanya pemilik atau Admin)
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Produk berhasil dihapus (No Content).
+        '404':
+          description: Produk tidak ditemukan.
+
+  # -----------------------------------------------------
+  # --- ENDPOINT PESANAN (orders) ---
+  # -----------------------------------------------------
+  /orders:
+    get: # ✅ GET DAFTAR DITAMBAHKAN
+      tags:
+        - Orders
+      summary: Daftar Pesanan Saya
+      description: Mengambil daftar pesanan yang dibuat oleh pengguna yang terautentikasi.
+      responses:
+        '200':
+          description: Daftar pesanan.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Order'
+        '401':
+          description: Tidak terautentikasi.
+    post:
+      tags:
+        - Orders
+      summary: Membuat Pesanan Baru
+      description: Pembeli membuat pesanan baru.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewOrder'
+      responses:
+        '201':
+          description: Pesanan berhasil dibuat.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    example: ORD-20251009-0001
+                  status:
+                    $ref: '#/components/schemas/OrderStatus'
+        '400':
+          description: Stok tidak cukup atau input tidak valid.
+
+  /orders/{orderId}:
+    get: # ✅ GET DETAIL DITAMBAHKAN
+      tags:
+        - Orders
+      summary: Mendapatkan Detail Pesanan
+      description: Mengambil detail pesanan tertentu.
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Detail pesanan.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order' 
+        '404':
+          description: Pesanan tidak ditemukan.
+    delete: # ✅ DELETE DITAMBAHKAN (Pembatalan)
+      tags:
+        - Orders
+      summary: Membatalkan Pesanan
+      description: Membatalkan pesanan. (Hanya diizinkan jika status masih 'pending').
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Pesanan berhasil dibatalkan.
+        '403':
+          description: Pesanan tidak dapat dibatalkan.
+        '404':
+          description: Pesanan tidak ditemukan.
+
+  /orders/{orderId}/status:
+    put:
+      tags:
+        - Orders
+      summary: Memperbarui Status Pesanan
+      description: Memperbarui status pesanan.
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  $ref: '#/components/schemas/OrderStatus'
+                  example: shipped
+      responses:
+        '200':
+          description: Status pesanan berhasil diperbarui.
+        '403':
+          description: Tidak diizinkan.
+          
+  # -----------------------------------------------------
+  # --- ENDPOINT ULASAN (reviews) ---
+  # -----------------------------------------------------
+  /products/{productId}/reviews:
+    get: # ✅ GET DAFTAR DITAMBAHKAN
+      tags:
+        - Reviews
+      summary: Mendapatkan Ulasan Produk
+      description: Mengambil daftar ulasan untuk produk tertentu.
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Daftar ulasan.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Review'
+    post:
+      tags:
+        - Reviews
+      summary: Memberikan Ulasan Produk
+      description: Pembeli memberikan rating dan komentar pada produk. (Memerlukan pembelian sebelumnya)
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Review'
+              properties: # Hanya kirim rating dan comment saat POST
+                rating:
+                  type: integer
+                  minimum: 1
+                  maximum: 5
+                comment:
+                  type: string
+      responses:
+        '201':
+          description: Ulasan berhasil ditambahkan.
+        '403':
+          description: Pembeli belum membeli produk ini.
+          
+  /reviews/{reviewId}: # Endpoint per ID Review
+    get: # ✅ GET DETAIL DITAMBAHKAN
+      tags:
+        - Reviews
+      summary: Mendapatkan Detail Ulasan
+      description: Mengambil detail satu ulasan berdasarkan ID.
+      parameters:
+        - name: reviewId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Detail ulasan.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Review'
+        '404':
+          description: Ulasan tidak ditemukan.
+    put:
+      tags:
+        - Reviews
+      summary: Memperbarui Ulasan
+      description: Pembeli memperbarui rating dan komentar pada ulasan produknya.
+      parameters:
+        - name: reviewId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Review'
+              properties: # Hanya izinkan update rating dan comment
+                rating:
+                  type: integer
+                  minimum: 1
+                  maximum: 5
+                comment:
+                  type: string
+      responses:
+        '200':
+          description: Ulasan berhasil diperbarui.
+        '404':
+          description: Ulasan tidak ditemukan.
+    delete: # ✅ DELETE DITAMBAHKAN
+      tags:
+        - Reviews
+      summary: Menghapus Ulasan
+      description: Menghapus ulasan. (Hanya pemilik ulasan atau Admin)
+      parameters:
+        - name: reviewId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Ulasan berhasil dihapus (No Content).
+        '404':
+          description: Ulasan tidak ditemukan.

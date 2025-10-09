@@ -1,5 +1,12 @@
 require('dotenv').config();
+
+
 const express = require('express');
+const { GoogleGenAI } = require('@google/genai');
+const swaggerUi = require('swagger-ui-express');
+const YAML = require('yamljs');
+const path = require('path');
+
 const { Pool } = require('pg');
 const userRoutes = require('./routes/user_service/userRoutes'); 
 const categoryRoutes = require('./routes/catalog_service/categoryRoutes'); 
@@ -10,11 +17,14 @@ const addressRoutes=require('./routes/user_service/addressRoutes')
 const reviewRoutes=require('./routes/review_service/reviewRoutes')
 const financeRoutes=require('./routes/finance_service/financeRoutes')
 const debugRoutes = require('./routes/debugRoutes'); // <-- BARU: Import Debug Routes
+const orderRoutes = require('./routes/order_service/orderRoutes'); // <-- TAMBAHKAN INI
 
 // --- DEBUG CHECKPOINT 1 ---
 console.log('CHECKPOINT 1: Dependensi dan Modul berhasil dimuat.'); 
 // --------------------------
-
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY});
+// Mulai sesi chat untuk menjaga konteks percakapan
+const chat = ai.chats.create({ model: 'gemini-2.5-flash' });
 const app = express();
 app.use(express.json());
 
@@ -26,7 +36,31 @@ const dbPool = new Pool({
   password: process.env.DB_PASS,
   database: process.env.DB_NAME,
 });
+app.post('/chat', async (req, res) => {
+    const { prompt } = req.body;
+    
+    if (!prompt) {  
+        return res.status(400).json({ error: "Prompt is required." });
+    }
 
+    try {
+        // Panggil Gemini API
+        const response = await chat.sendMessage({ message: prompt });
+        
+        // Kirim respons sukses kembali ke aplikasi mobile
+        res.json({
+            status: "success",
+            response: response.text
+        });
+
+    } catch (error) {
+        console.error("Gemini API Error:", error);
+        res.status(500).json({ 
+            status: "error",
+            error: "Failed to communicate with AI service."
+        });
+    }
+});
 app.use('/auth', userRoutes(dbPool)); 
 app.use('/auth', addressRoutes(dbPool));
 
@@ -41,6 +75,7 @@ app.use('/finance',financeRoutes(dbPool))
 
 app.use('/debug', debugRoutes(dbPool)); 
 
+app.use('/orders', orderRoutes(dbPool)); // <-- TAMBAHKAN PEMASANGAN ROUTER INI
 
 
 
@@ -80,6 +115,13 @@ app.get('/db-tables', async (req, res) => {
 });
 
 
+  
+
+const swaggerSpec = YAML.load(path.join(__dirname, 'openapi.yaml'));
+
+// 2. Setup Middleware untuk Dokumentasi Swagger UI
+// Dokumentasi akan tersedia di http://localhost:3000/api-docs
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 // =======================================================
 // 4. LISTENER SERVER
 // =======================================================
